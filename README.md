@@ -6,7 +6,7 @@ ESP32를 Wi-Fi에 연결해 로컬 네트워크용 AI 질의응답 웹 인터페
 
 ## 실행 화면
 
-![ESP32 AI Studio 실행 화면](./img_01.jpeg)
+![ESP32 AI Studio 실행 화면](./static/title.jpeg)
 
 ESP32에서 제공하는 웹 인터페이스로, 별도의 애플리케이션 설치 없이 같은 내부 네트워크에 연결된 브라우저에서 사용할 수 있습니다.
 
@@ -110,13 +110,13 @@ ESP32에서 제공하는 웹 인터페이스로, 별도의 애플리케이션 �
 ESP32-AI-Studio/
 │
 ├── NIM.ino          # ESP32 메인 펌웨어 및 API 처리
-├── page.h           # HTML / CSS / JavaScript 웹 인터페이스
-├── secrets.h        # Wi-Fi 및 NVIDIA API 설정
-│
-├── img_01.jpeg      # README 실행 화면 이미지
-│
+├── include/
+│   ├── page.h       # HTML / CSS / JavaScript 웹 인터페이스
+│   ├── secrets.example.h # 설정 파일 예시
+│   └── secrets.h    # 로컬 Wi-Fi 및 NVIDIA API 설정 (Git 제외)
+├── static/
+│   └── title.jpeg   # README 실행 화면 이미지
 ├── .gitignore       # 민감한 설정 파일 제외
-│
 └── README.md
 ```
 
@@ -149,17 +149,19 @@ nvidia/nemotron-3.5-super-vl-120b-a12b
 
 ### 1. 프로젝트 파일 구성
 
-다음 파일을 동일한 Arduino 스케치 폴더에 배치합니다.
+`NIM.ino`와 `include`, `static` 폴더를 함께 유지합니다. 로컬 설정 파일은 `include` 폴더에 둡니다.
 
 ```text
 NIM.ino
-page.h
-secrets.h
+include/page.h
+include/secrets.example.h
+include/secrets.h
+static/title.jpeg
 ```
 
 ### 2. API 및 Wi-Fi 설정
 
-`secrets.h` 파일을 생성하고 다음 항목을 설정합니다.
+`include/secrets.example.h`를 복사해 `include/secrets.h`를 만들고 실제 값을 설정합니다. `include/secrets.h`는 `.gitignore`에 의해 Git에 포함되지 않습니다.
 
 ```cpp
 const char* WIFI_SSID = "YOUR_WIFI_SSID";

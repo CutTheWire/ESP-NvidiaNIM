@@ -5,8 +5,8 @@
 #include <WebSocketsServer.h>
 #include <ArduinoJson.h>
 #include <ESPmDNS.h>
-#include "page.h"
-#include "secrets.h"
+#include "include/page.h"
+#include "include/secrets.h"
 
 WebServer server(80);
 WebSocketsServer webSocket(81);
@@ -32,6 +32,7 @@ QueueHandle_t streamQueue = nullptr;
 String jobQuestion;
 String jobImageUrl;
 bool jobBusy = false;
+bool firstContentLogged = false;
 
 
 // 스트리밍 메시지를 큐에 넣습니다.
@@ -55,7 +56,12 @@ bool enqueueMessage(StreamMessageType type, const String& text) {
   }
   message.text[length] = '\0';
 
-  return xQueueSend(streamQueue, &message, pdMS_TO_TICKS(10000)) == pdTRUE;
+  if (xQueueSend(streamQueue, &message, pdMS_TO_TICKS(10000)) != pdTRUE) {
+    Serial.printf("스트리밍 큐 전송 실패 (type=%u)\n", type);
+    return false;
+  }
+
+  return true;
 }
 
 
@@ -138,6 +144,7 @@ int processSseLine(String line) {
   // 스트리밍 API 오류 응답 확인
   JsonVariant apiError = eventDoc["error"];
   if (!apiError.isNull()) {
+    Serial.println("NVIDIA API가 스트림 오류 이벤트를 반환했습니다.");
     String errorText;
     serializeJson(apiError, errorText);
     enqueueMessage(MSG_ERROR, "NVIDIA API 오류: " + errorText);
@@ -151,8 +158,15 @@ int processSseLine(String line) {
   if (!content.isNull()) {
     String piece = content.as<String>();
 
-    if (piece.length() > 0 && !enqueueTextChunks(piece)) {
-      return -1;
+    if (piece.length() > 0) {
+      if (!firstContentLogged) {
+        Serial.printf("NVIDIA 첫 응답 조각 수신 (%u bytes)\n", piece.length());
+        firstContentLogged = true;
+      }
+
+      if (!enqueueTextChunks(piece)) {
+        return -1;
+      }
     }
   }
 
@@ -162,6 +176,8 @@ int processSseLine(String line) {
 
 // NVIDIA API 스트리밍 요청 task
 void apiTask(void* parameter) {
+  Serial.println("NVIDIA API 작업 시작");
+
   String question = jobQuestion;
   String imageUrl = jobImageUrl;
 
@@ -175,6 +191,11 @@ void apiTask(void* parameter) {
   requestDoc["chat_template_kwargs"]["enable_thinking"] = false;
 
   JsonArray messages = requestDoc.createNestedArray("messages");
+  JsonObject systemMessage = messages.createNestedObject();
+  systemMessage["role"] = "system";
+  systemMessage["content"] =
+      "항상 한국어로만 답변하세요. 이미지 분석 결과와 설명도 한국어로 작성하세요. 영어 등 다른 언어로 답하지 마세요.";
+
   JsonObject message = messages.createNestedObject();
   message["role"] = "user";
 
@@ -201,12 +222,14 @@ void apiTask(void* parameter) {
   client.setInsecure();
 
   HTTPClient http;
-  http.setTimeout(120000);
+  http.setConnectTimeout(20000);
+  http.setTimeout(45000);
 
   // HTTP/1.0 요청으로 chunked transfer 응답 문제를 줄입니다.
   http.useHTTP10(true);
 
   if (!http.begin(client, NVIDIA_API_URL)) {
+    Serial.println("NVIDIA HTTPS 연결 시작 실패");
     enqueueMessage(MSG_ERROR, "NVIDIA HTTPS 연결을 시작하지 못했습니다.");
     vTaskDelete(nullptr);
     return;
@@ -216,9 +239,28 @@ void apiTask(void* parameter) {
   http.addHeader("Content-Type", "application/json");
   http.addHeader("Accept", "text/event-stream");
 
+  Serial.printf(
+    "NVIDIA API POST 전송 중 (Wi-Fi RSSI: %d dBm, heap: %u bytes)\n",
+    WiFi.RSSI(),
+    ESP.getFreeHeap()
+  );
+  unsigned long requestStartedAt = millis();
   int statusCode = http.POST(payload);
 
-  Serial.printf("NVIDIA HTTP 상태 코드: %d\n", statusCode);
+  Serial.printf(
+    "NVIDIA HTTP 상태 코드: %d (응답 대기: %lu ms)\n",
+    statusCode,
+    millis() - requestStartedAt
+  );
+
+  if (statusCode <= 0) {
+    String errorText = "NVIDIA 연결 오류: ";
+    errorText += HTTPClient::errorToString(statusCode);
+    http.end();
+    enqueueMessage(MSG_ERROR, errorText);
+    vTaskDelete(nullptr);
+    return;
+  }
 
   if (statusCode < 200 || statusCode >= 300) {
     String errorBody = http.getString();
@@ -250,6 +292,7 @@ void apiTask(void* parameter) {
 
   enqueueMessage(MSG_START, "");
 
+  firstContentLogged = false;
   String line;
   line.reserve(512);
 
@@ -314,13 +357,16 @@ void apiTask(void* parameter) {
   http.end();
 
   if (streamError) {
+    Serial.println("NVIDIA 스트림 처리 오류");
     enqueueMessage(
       MSG_ERROR,
       "스트리밍 응답 처리 중 오류가 발생했습니다. 시리얼 모니터를 확인하세요."
     );
   } else if (receivedDone) {
+    Serial.println("NVIDIA 스트림 완료 ([DONE])");
     enqueueMessage(MSG_DONE, "");
   } else {
+    Serial.println("NVIDIA 스트림이 [DONE] 전에 종료됨");
     enqueueMessage(
       MSG_ERROR,
       "API 스트림이 [DONE] 이벤트 없이 종료되었습니다."
@@ -363,6 +409,11 @@ void onWebSocketEvent(
     return;
   }
 
+  Serial.printf(
+    "WebSocket 질문 수신 (image=%s)\n",
+    doc["image"].as<String>().length() > 0 ? "yes" : "no"
+  );
+
   if (jobBusy) {
     enqueueMessage(MSG_ERROR, "이미 질문을 처리 중입니다. 잠시 기다려 주세요.");
     return;
@@ -391,6 +442,7 @@ void onWebSocketEvent(
   }
 
   jobBusy = true;
+  firstContentLogged = false;
   enqueueMessage(MSG_STATUS, "NVIDIA API에 요청 중입니다...");
 
   BaseType_t taskCreated = xTaskCreatePinnedToCore(
@@ -404,6 +456,7 @@ void onWebSocketEvent(
   );
 
   if (taskCreated != pdPASS) {
+    Serial.println("NVIDIA API 작업 생성 실패");
     jobBusy = false;
     enqueueMessage(MSG_ERROR, "API 작업을 시작하지 못했습니다. 메모리를 확인하세요.");
   }
