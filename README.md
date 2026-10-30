@@ -1,12 +1,14 @@
 # ESP32 AI Studio
 
+![ESP32 AI Studio](./static/title.jpeg)
+
 ESP32를 Wi-Fi에 연결해 로컬 네트워크용 AI 질의응답 웹 인터페이스를 제공하는 프로젝트입니다.
 
 스마트폰이나 PC 브라우저에서 ESP32 웹페이지에 접속하여 텍스트 질문과 이미지 URL을 전송하면, ESP32가 NVIDIA NIM API에 요청하고 스트리밍 방식으로 전달받은 AI 답변을 실시간으로 화면에 표시합니다.
 
 ## 실행 화면
 
-![ESP32 AI Studio 실행 화면](./static/title.jpeg)
+![ESP32 AI Studio 실행 화면](./static/demonstration.jpeg)
 
 ESP32에서 제공하는 웹 인터페이스로, 별도의 애플리케이션 설치 없이 같은 내부 네트워크에 연결된 브라우저에서 사용할 수 있습니다.
 
