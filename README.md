@@ -1,6 +1,6 @@
 # ESP32 AI Studio
 
-![ESP32 AI Studio](./static/title.jpeg)
+![ESP32 AI Studio](./static/main_title.jpeg)
 
 ESP32를 Wi-Fi에 연결해 로컬 네트워크용 AI 질의응답 웹 인터페이스를 제공하는 프로젝트입니다.
 
