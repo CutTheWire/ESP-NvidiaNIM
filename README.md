@@ -8,7 +8,7 @@ ESP32를 Wi-Fi에 연결해 로컬 네트워크용 AI 질의응답 웹 인터페
 
 ## 실행 화면
 
-![ESP32 AI Studio 실행 화면](./static/demonstrat.jpeg)
+![ESP32 AI Studio 실행 화면](./static/demonstration.jpeg)
 
 ESP32에서 제공하는 웹 인터페이스로, 별도의 애플리케이션 설치 없이 같은 내부 네트워크에 연결된 브라우저에서 사용할 수 있습니다.
 
