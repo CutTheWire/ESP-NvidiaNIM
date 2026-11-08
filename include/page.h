@@ -424,11 +424,93 @@ textarea:focus, input[type="url"]:focus {
   line-height: 1.6;
 }
 
+.server-card {
+  margin-bottom: 18px;
+  padding: 20px;
+}
+
+.server-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 15px;
+}
+
+.server-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 750;
+}
+
+.server-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.server-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #707a72;
+}
+
+.server-live.online {
+  color: #c8f28a;
+}
+
+.server-live.online .server-live-dot {
+  background: var(--green-bright);
+  box-shadow: 0 0 9px rgba(139,214,0,.7);
+}
+
+.server-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.server-metric {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #0e130f;
+}
+
+.server-metric-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.server-metric-value {
+  margin: 8px 0 0;
+  color: var(--text);
+  font-size: 17px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
+}
+
+.server-metric-detail {
+  min-height: 15px;
+  margin: 5px 0 0;
+  color: #748077;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 600px) {
   .shell { padding: 18px 14px 32px; }
   .topbar { padding-bottom: 20px; }
   .hero { padding: 32px 0 20px; }
   .input-card { padding: 16px; }
+  .server-card { padding: 16px; }
+  .server-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .actions {
     align-items: stretch;
     flex-direction: column;
@@ -466,6 +548,48 @@ textarea:focus, input[type="url"]:focus {
         질문을 보내면 NVIDIA API의 답변이 실시간으로 표시됩니다.
         이미지 URL을 입력하면 미리보기를 확인할 수 있습니다.
       </p>
+    </section>
+
+    <section class="card server-card" aria-labelledby="serverTitle">
+      <div class="server-header">
+        <h2 id="serverTitle" class="server-title">ESP32 서버 상태</h2>
+        <div id="serverStatus" class="server-live" role="status">
+          <span class="server-live-dot"></span>
+          <span id="serverStatusText">정보 수신 대기 중</span>
+        </div>
+      </div>
+      <div class="server-grid" aria-live="polite">
+        <div class="server-metric">
+          <p class="server-metric-label">디바이스</p>
+          <p id="serverDevice" class="server-metric-value">ESP32</p>
+          <p id="serverCores" class="server-metric-detail">칩 정보 수신 대기 중</p>
+        </div>
+        <div class="server-metric">
+          <p class="server-metric-label">서버 가동 시간</p>
+          <p id="serverUptime" class="server-metric-value">--</p>
+          <p class="server-metric-detail">마지막 부팅 후 경과</p>
+        </div>
+        <div class="server-metric">
+          <p class="server-metric-label">Wi-Fi 신호</p>
+          <p id="wifiSignal" class="server-metric-value">--</p>
+          <p id="wifiSignalDetail" class="server-metric-detail">신호 정보 수신 대기 중</p>
+        </div>
+        <div class="server-metric">
+          <p class="server-metric-label">여유 힙 메모리</p>
+          <p id="freeHeap" class="server-metric-value">--</p>
+          <p id="freeHeapDetail" class="server-metric-detail">메모리 정보 수신 대기 중</p>
+        </div>
+        <div class="server-metric">
+          <p class="server-metric-label">CPU 주파수</p>
+          <p id="cpuFrequency" class="server-metric-value">--</p>
+          <p class="server-metric-detail">현재 설정 주파수</p>
+        </div>
+        <div class="server-metric">
+          <p class="server-metric-label">서버 접속 주소</p>
+          <p id="serverAddress" class="server-metric-value">--</p>
+          <p id="apiActivity" class="server-metric-detail">API 대기 중</p>
+        </div>
+      </div>
     </section>
 
     <section class="card input-card">
@@ -530,6 +654,8 @@ textarea:focus, input[type="url"]:focus {
 <script>
 const connectionBadge = document.getElementById("connection");
 const connectionText = document.getElementById("connectionText");
+const serverStatus = document.getElementById("serverStatus");
+const serverStatusText = document.getElementById("serverStatusText");
 const responseState = document.getElementById("responseState");
 const answerElement = document.getElementById("answer");
 const sendButton = document.getElementById("sendButton");
@@ -560,6 +686,62 @@ function setConnection(isOnline, message) {
   connectionText.textContent = message;
   connectionBadge.classList.toggle("online", isOnline);
   sendButton.disabled = !isOnline || waitingForAnswer;
+}
+
+function formatUptime(milliseconds) {
+  const totalSeconds = Math.floor(milliseconds / 1000);
+  const days = Math.floor(totalSeconds / 86400);
+  const hours = Math.floor((totalSeconds % 86400) / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  if (days > 0) return days + "일 " + hours + "시간";
+  if (hours > 0) return hours + "시간 " + minutes + "분";
+  if (minutes > 0) return minutes + "분 " + seconds + "초";
+  return seconds + "초";
+}
+
+function formatMemory(bytes) {
+  return Math.round(bytes / 1024) + " KB";
+}
+
+function updateServerStatus(message) {
+  document.getElementById("serverUptime").textContent =
+    formatUptime(message.uptimeMs);
+  document.getElementById("cpuFrequency").textContent =
+    message.cpuMHz + " MHz";
+  document.getElementById("serverDevice").textContent =
+    message.chipModel || "ESP32";
+  document.getElementById("serverCores").textContent =
+    message.chipCores + "코어 · ESP32";
+  document.getElementById("freeHeap").textContent =
+    formatMemory(message.freeHeap);
+  document.getElementById("freeHeapDetail").textContent =
+    "전체 " + formatMemory(message.heapSize) +
+    " · 부팅 후 최저 " + formatMemory(message.minFreeHeap);
+  document.getElementById("serverAddress").textContent =
+    message.ip + ":" + message.httpPort;
+  document.getElementById("apiActivity").textContent =
+    message.apiBusy ? "NVIDIA API 요청 처리 중" : "NVIDIA API 대기 중";
+
+  if (message.wifiConnected) {
+    const rssi = message.wifiRssi;
+    let quality = "약함";
+    if (rssi >= -55) quality = "매우 좋음";
+    else if (rssi >= -67) quality = "좋음";
+    else if (rssi >= -75) quality = "보통";
+
+    document.getElementById("wifiSignal").textContent = rssi + " dBm";
+    document.getElementById("wifiSignalDetail").textContent =
+      "Wi-Fi 연결됨 · " + quality;
+  } else {
+    document.getElementById("wifiSignal").textContent = "연결 끊김";
+    document.getElementById("wifiSignalDetail").textContent =
+      "Wi-Fi 연결을 확인해 주세요";
+  }
+
+  serverStatusText.textContent = "5초마다 실시간 갱신";
+  serverStatus.classList.add("online");
 }
 
 function updatePreview() {
@@ -625,6 +807,7 @@ function connectWebSocket() {
 
   socket.onopen = () => {
     setConnection(true, "ESP32 연결됨");
+    serverStatusText.textContent = "서버 정보 수신 대기 중";
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
@@ -633,6 +816,8 @@ function connectWebSocket() {
 
   socket.onclose = () => {
     setConnection(false, "연결 끊김 · 재연결 중");
+    serverStatus.classList.remove("online");
+    serverStatusText.textContent = "서버 연결 끊김";
     if (!reconnectTimer) {
       reconnectTimer = setTimeout(() => {
         reconnectTimer = null;
@@ -643,6 +828,8 @@ function connectWebSocket() {
 
   socket.onerror = () => {
     setConnection(false, "WebSocket 연결 오류");
+    serverStatus.classList.remove("online");
+    serverStatusText.textContent = "WebSocket 연결 오류";
   };
 
   socket.onmessage = (event) => {
@@ -653,6 +840,11 @@ function connectWebSocket() {
     } catch (e) {
       responseState.textContent = "응답 오류";
       answerElement.textContent = "서버 응답을 해석하지 못했습니다.";
+      return;
+    }
+
+    if (message.type === "telemetry") {
+      updateServerStatus(message);
       return;
     }
 

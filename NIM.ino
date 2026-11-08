@@ -8,7 +8,8 @@
 #include "include/page.h"
 #include "include/secrets.h"
 
-WebServer server(80);
+const uint16_t HTTP_PORT = 8080;
+WebServer server(HTTP_PORT);
 WebSocketsServer webSocket(81);
 
 // WebSocket 이벤트 종류
@@ -506,8 +507,11 @@ void setup() {
   Serial.println(WiFi.localIP());
 
   if (MDNS.begin("esp32-ai")) {
-    MDNS.addService("http", "tcp", 80);
-    Serial.println("웹페이지 주소: http://esp32-ai.local");
+    MDNS.addService("http", "tcp", HTTP_PORT);
+    Serial.printf(
+      "웹페이지 주소: http://esp32-ai.local:%u\n",
+      static_cast<unsigned int>(HTTP_PORT)
+    );
   } else {
     Serial.println("mDNS 시작 실패");
   }
@@ -518,7 +522,10 @@ void setup() {
   webSocket.begin();
   webSocket.onEvent(onWebSocketEvent);
 
-  Serial.println("웹서버 시작: HTTP 80, WebSocket 81");
+  Serial.printf(
+    "웹서버 시작: HTTP %u, WebSocket 81\n",
+    static_cast<unsigned int>(HTTP_PORT)
+  );
 }
 
 
@@ -564,6 +571,33 @@ void loop() {
     String outgoingText;
     serializeJson(outgoingDoc, outgoingText);
     webSocket.broadcastTXT(outgoingText);
+  }
+
+  static unsigned long lastTelemetryAt = 0;
+  unsigned long now = millis();
+
+  if (now - lastTelemetryAt >= 5000) {
+    DynamicJsonDocument telemetryDoc(512);
+    bool wifiConnected = WiFi.status() == WL_CONNECTED;
+
+    telemetryDoc["type"] = "telemetry";
+    telemetryDoc["uptimeMs"] = now;
+    telemetryDoc["wifiConnected"] = wifiConnected;
+    telemetryDoc["wifiRssi"] = wifiConnected ? WiFi.RSSI() : 0;
+    telemetryDoc["freeHeap"] = ESP.getFreeHeap();
+    telemetryDoc["minFreeHeap"] = ESP.getMinFreeHeap();
+    telemetryDoc["heapSize"] = ESP.getHeapSize();
+    telemetryDoc["cpuMHz"] = ESP.getCpuFreqMHz();
+    telemetryDoc["chipModel"] = ESP.getChipModel();
+    telemetryDoc["chipCores"] = ESP.getChipCores();
+    telemetryDoc["ip"] = WiFi.localIP().toString();
+    telemetryDoc["httpPort"] = HTTP_PORT;
+    telemetryDoc["apiBusy"] = jobBusy;
+
+    String telemetryText;
+    serializeJson(telemetryDoc, telemetryText);
+    webSocket.broadcastTXT(telemetryText);
+    lastTelemetryAt = now;
   }
 
   delay(2);
